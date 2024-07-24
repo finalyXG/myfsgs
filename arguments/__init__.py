@@ -55,6 +55,32 @@ class ModelParams(ParamGroup):
         self.data_device = "cuda"
         self.eval = False
         self.n_views = 0
+        # Laurence added
+        self.load_vgg_img1k_model = 0
+        self.use_feat_l1_loss = 0
+        self.lambda_feat_l1_loss = 1.0
+        self.load_vgg_img1k_upto = 1
+        self.transformation_layer_mode = "linear"
+        self.feat_map_wh_scale = 1.0
+        self.semantic_feature_mode = '59'
+        self.use_vgg_preprocess = 0
+        self.use_vgg_preprocess_mean_std = 0
+        self.use_scaling_std_loss = 0
+        self.target_scaling_std = 1.0
+        self.lambda_scaling_std = 1.0
+        self.use_total_var_diff_loss = 0
+        self.lambda_tv_diff = 1.0
+        self.tv_weight = 1e-6
+        self.use_wh_var_diff_loss=0
+        self.wh_var_diff_loss_name=0        
+        self.lambda_wh_var_diff = 10.0
+        self.wh_var_diff_loss_mode='tv_loss_2'
+        self.proximity_max_steps = 2000
+        self.transformation_layer_dim=128
+        self.transformation_post_layer_mode = ""
+        self.only_render_feat=0
+
+
         super().__init__(parser, "Loading Parameters", sentinel)
 
     def extract(self, args):
@@ -97,6 +123,10 @@ class OptimizationParams(ParamGroup):
         self.dist_thres = 10.
         self.depth_weight = 0.05
         self.depth_pseudo_weight = 0.5
+        self.end_feat_reg = 1000000
+        self.lambda_feat_l1_after_end_feat_reg = 1e-6
+        self.trans_lr = 1e-3
+
         super().__init__(parser, "Optimization Parameters")
 
 

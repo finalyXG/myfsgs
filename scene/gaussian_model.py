@@ -22,7 +22,7 @@ from utils.graphics_utils import BasicPointCloud
 from utils.general_utils import strip_symmetric, build_scaling_rotation, chamfer_dist
 import open3d as o3d
 from torch.optim.lr_scheduler import MultiStepLR
-
+import os
 
 class GaussianModel:
 
@@ -158,7 +158,46 @@ class GaussianModel:
         self.confidence = torch.ones_like(opacities, device="cuda")
         if self.args.train_bg:
             self.bg_color = nn.Parameter((torch.zeros(3, 1, 1) + 0.).cuda().requires_grad_(True))
+        
+        if os.args.semantic_feature_mode in ['59', '59dt(feat)', '59dt(feat+o)', '59dt(feat+o+r)']:
+            input_dim = 59
+        elif os.args.semantic_feature_mode == '59-feat':
+            input_dim = 11
+        elif os.args.semantic_feature_mode == '59-(feat+o)':
+            input_dim = 10
+        else:
+            raise NotImplementedError()
+             
+        if os.args.transformation_layer_mode == 'linear':
+            self.transformation_layer =  nn.Sequential(
+                nn.Linear(input_dim, os.args.transformation_layer_dim),
+            )
+        elif os.args.transformation_layer_mode == 'linear+relu+linear':
+            self.transformation_layer =  nn.Sequential(
+                nn.Linear(input_dim, os.args.transformation_layer_dim),
+                nn.ReLU(),
+                nn.Linear(os.args.transformation_layer_dim, os.args.transformation_layer_dim),
+            )
+        elif os.args.transformation_layer_mode == 'linear+relu':
+            self.transformation_layer =  nn.Sequential(
+                nn.Linear(input_dim, os.args.transformation_layer_dim),
+                nn.ReLU(),
+            )
+        else:
+            raise ValueError("not implemented")
+        
+        if os.args.transformation_post_layer_mode == 'linear+relu':
+            self.transformation_layer_post =  nn.Sequential(
+                nn.Linear(128, os.args.transformation_layer_dim),
+                nn.ReLU(),
+            )
+            self.transformation_layer_post = self.transformation_layer_post.to("cuda")
+        elif os.args.transformation_post_layer_mode != '':
+            raise NotImplementedError()
 
+            
+
+        self.transformation_layer = self.transformation_layer.to("cuda")
 
 
 
@@ -177,6 +216,8 @@ class GaussianModel:
         ]
         if self.args.train_bg:
             l.append({'params': [self.bg_color], 'lr': 0.001, "name": "bg_color"})
+        
+        l.append({'params': self.transformation_layer.parameters(), 'lr': os.args.trans_lr, 'name':'transformation'})
 
         self.optimizer = torch.optim.Adam(l, lr=0.0, eps=1e-15)
         self.xyz_scheduler_args = get_expon_lr_func(lr_init=training_args.position_lr_init * self.spatial_lr_scale,
@@ -299,7 +340,7 @@ class GaussianModel:
     def _prune_optimizer(self, mask):
         optimizable_tensors = {}
         for group in self.optimizer.param_groups:
-            if group["name"] in ['bg_color']:
+            if group["name"] in ['bg_color', 'transformation']:
                 continue
             stored_state = self.optimizer.state.get(group['params'][0], None)
             if stored_state is not None:
@@ -354,7 +395,7 @@ class GaussianModel:
     def cat_tensors_to_optimizer(self, tensors_dict):
         optimizable_tensors = {}
         for group in self.optimizer.param_groups:
-            if group["name"] in ['bg_color']:
+            if group["name"] in ['bg_color', 'transformation']:
                 continue
             assert len(group["params"]) == 1
             extension_tensor = tensors_dict[group["name"]]
@@ -478,7 +519,8 @@ class GaussianModel:
 
         self.densify_and_clone(grads, max_grad, extent)
         self.densify_and_split(grads, max_grad, extent, iter)
-        if iter < 2000:
+        # if iter < 2000:
+        if iter < os.args.proximity_max_steps:
             self.proximity(extent)
 
         prune_mask = (self.get_opacity < min_opacity).squeeze()
